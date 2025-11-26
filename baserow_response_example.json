@@ -1,0 +1,22 @@
+{
+  "count": 4,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 88,
+      "order": "4.00000000000000000000",
+      "ID": "625061a6-1be6-43e7-87ee-988c1666ece3",
+      "zelador": "",
+      "data_inspecao": "2025-11-26",
+      "status": {
+        "id": 3054,
+        "value": "Pendente Aprovação",
+        "color": "darker-red"
+      },
+      "observacoes": null,
+      "fotos_gerais": [],
+      "itens_checklist": []
+    }
+  ]
+}
