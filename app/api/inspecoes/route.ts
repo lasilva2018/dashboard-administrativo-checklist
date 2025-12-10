@@ -4,7 +4,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
 
-  let query = "table/745/?user_field_names=true";
+  // ID correto da tabela de inspeções
+  const TABLE_ID = process.env.BASEROW_INSPECOES_TABLE_ID || "745";
+
+  // Construção segura da query
+  let query = `table/${TABLE_ID}/?user_field_names=true`;
 
   if (status) {
     query += `&filter__field_status__equal=${status}`;
