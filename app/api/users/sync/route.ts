@@ -1,104 +1,95 @@
-// /app/api/users/sync/route.ts
-
 import { NextResponse } from "next/server";
 
-const BASEROW_TOKEN = process.env.BASEROW_PAT;
-const BASEROW_API = "https://baserow.automator-doa.com.br/api/database/rows/table/747/";
-const HEADERS = {
-  Authorization: `Token ${BASEROW_TOKEN}`,
-  "Content-Type": "application/json",
-};
-
 export async function POST(req: Request) {
+  console.log("📥 RECEBIDO PARA SYNC");
+
   try {
-    const body = await req.json();
-    const { uid, nome, email, papel } = body;
+    const { uid, nome, email, papel } = await req.json();
+    console.log("➡ Dados recebidos:", { uid, nome, email, papel });
 
-    console.log("📥 RECEBIDO PARA SYNC:", body);
+    // -------------------------------
+    // 🔐 VARIÁVEIS DE AMBIENTE
+    // -------------------------------
+    const BASEROW_URL = process.env.BASEROW_URL;
+    const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
+    const BASEROW_USERS_TABLE_ID = process.env.BASEROW_USERS_TABLE_ID;
 
-    if (!uid || !email) {
-      console.log("❌ UID ou Email ausentes");
-      return NextResponse.json({ error: "Missing uid or email" }, { status: 400 });
+    if (!BASEROW_URL || !BASEROW_TOKEN || !BASEROW_USERS_TABLE_ID) {
+      console.error("❌ Variáveis de ambiente faltando");
+      return NextResponse.json(
+        { error: "Missing environment variables" },
+        { status: 500 }
+      );
     }
 
-    // 🔍 Busca aprimorada (ignora valores vazios)
-    const filterUrl =
-      `${BASEROW_API}?user_field_names=true` +
-      `&filter__uid__equal=${encodeURIComponent(uid)}` +
-      `&filter__uid__not_equal=`; // <-- ignora registros com uid vazio
+    // ----------------------------------------------------
+    // 🔍 1. BUSCAR USUÁRIO PELO UID
+    // ----------------------------------------------------
+    const findUrl = `${BASEROW_URL}/api/database/rows/table/${BASEROW_USERS_TABLE_ID}/?user_field_names=true&filter__uid__equal=${uid}`;
 
-    console.log("🔎 Consultando Baserow:", filterUrl);
+    console.log("🔎 Consultando Baserow:", findUrl);
 
-    const res = await fetch(filterUrl, { method: "GET", headers: HEADERS });
-    const data = await res.json();
-
-    console.log("🔍 RESPOSTA FIND:", data);
-
-    const exists = data?.results?.length > 0 ? data.results[0] : null;
-
-    // =====================================================================================
-    // CASO 1 — USUÁRIO JÁ EXISTE → Atualizar dados se necessário
-    // =====================================================================================
-
-    if (exists) {
-      console.log("✔ Usuário encontrado:", exists);
-
-      const updateUrl = `${BASEROW_API}${exists.id}/?user_field_names=true`;
-
-      const updatePayload = {
-        nome,
-        email,
-        papel,
-        ativo: true,
-      };
-
-      console.log("♻ Atualizando usuário:", updatePayload);
-
-      await fetch(updateUrl, {
-        method: "PATCH",
-        headers: HEADERS,
-        body: JSON.stringify(updatePayload),
-      });
-
-      return NextResponse.json({
-        status: "updated",
-        baserow_id: exists.id,
-      });
-    }
-
-    // =====================================================================================
-    // CASO 2 — USUÁRIO NÃO EXISTE → Criar novo
-    // =====================================================================================
-
-    console.log("➕ Criando novo usuário no Baserow…");
-
-    const payload = {
-      uid,
-      nome,
-      email,
-      papel,
-      ativo: true,
-    };
-
-    console.log("📦 Dados enviados ao Baserow:", payload);
-
-    const createRes = await fetch(BASEROW_API, {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify(payload),
+    const findRes = await fetch(findUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${BASEROW_TOKEN}`,
+      },
     });
 
-    const created = await createRes.json();
+    const findData = await findRes.json();
+    console.log("🔍 RESPOSTA FIND:", findData);
 
-    console.log("🎉 Usuário criado:", created);
+    const existing = findData?.results?.[0];
+
+    if (existing && existing.id) {
+      console.log("✔ Usuário já existe no Baserow (pelo UID)");
+      return NextResponse.json({
+        status: "ok",
+        message: "Usuário já existia, não recriado.",
+        user: existing,
+      });
+    }
+
+    // ----------------------------------------------------
+    // 🆕 2. CRIAR NOVO USUÁRIO
+    // ----------------------------------------------------
+    console.log("➕ Criando novo usuário no Baserow…");
+
+    const createRes = await fetch(
+      `${BASEROW_URL}/api/database/rows/table/${BASEROW_USERS_TABLE_ID}/?user_field_names=true`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${BASEROW_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uid,
+          nome,
+          email,
+          papel,
+          ativo: true,
+        }),
+      }
+    );
+
+    const createData = await createRes.json();
+    console.log("🎉 Usuário criado:", createData);
+
+    if (!createRes.ok) {
+      console.error("❌ Erro ao criar usuário:", createData);
+      return NextResponse.json(
+        { error: "Erro ao criar usuário", details: createData },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       status: "created",
-      baserow_id: created.id,
+      user: createData,
     });
-
-  } catch (error) {
-    console.error("💥 ERRO EM /api/users/sync:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (err) {
+    console.error("❌ ERRO GERAL:", err);
+    return NextResponse.json({ error: "Erro interno", details: err }, { status: 500 });
   }
 }
