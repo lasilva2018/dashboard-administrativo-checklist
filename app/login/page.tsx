@@ -15,43 +15,60 @@ export default function LoginPage() {
   const { user, loading } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
 
+  // Se já estiver autenticado, redireciona
   useEffect(() => {
-    // Se já estiver logado, manda direto para o dash
     if (!loading && user) {
       router.push("/dashboard");
     }
   }, [user, loading, router]);
 
-const handleLogin = async () => {
-  try {
-    setSigningIn(true);
-    const result = await signInWithPopup(auth, googleProvider);
+  const handleLogin = async () => {
+    try {
+      setSigningIn(true);
 
-    const firebaseUser = result.user;
+      console.log("👉 Iniciando login Google...");
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = result.user;
 
-    // 🔥 Chama API interna para registrar/sincronizar o usuário no Baserow
-    await fetch("/api/users/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      console.log("🔐 Firebase user:", {
         uid: firebaseUser.uid,
-        nome: firebaseUser.displayName || "",
+        nome: firebaseUser.displayName,
         email: firebaseUser.email,
-        papel: "sindico", // ou "zelador", dependendo do tipo de usuário
-      }),
-    });
+      });
 
-    toast.success("Login realizado com sucesso!");
-    router.push("/dashboard");
-  } catch (error) {
-    console.error("Erro ao fazer login:", error);
-    toast.error("Erro ao fazer login. Tente novamente.");
-  } finally {
-    setSigningIn(false);
-  }
-};
+      // 🔥 Sincroniza com Baserow
+      const response = await fetch("/api/users/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: firebaseUser.uid,
+          nome: firebaseUser.displayName || "",
+          email: firebaseUser.email,
+          papel: "sindico", // mais tarde isso será dinâmico
+        }),
+      });
 
-  // Enquanto carrega o estado do usuário
+      const resultSync = await response.json();
+      console.log("📡 Retorno da sincronização:", resultSync);
+
+      if (!response.ok) {
+        console.error("❌ Erro ao sincronizar usuário:", resultSync);
+        toast.error("Erro ao registrar usuário no sistema.");
+        return;
+      }
+
+      toast.success("Login realizado com sucesso!");
+      router.push("/dashboard");
+
+    } catch (error) {
+      console.error("💥 Erro ao fazer login:", error);
+      toast.error("Erro ao fazer login. Tente novamente.");
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  // Enquanto verifica sessão
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -62,6 +79,8 @@ const handleLogin = async () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.38_0.15_264)] via-[oklch(0.45_0.16_264)] to-[oklch(0.55_0.18_264)] p-4">
       <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden">
+        
+        {/* Cabeçalho */}
         <div className="bg-gradient-to-br from-[oklch(0.38_0.15_264)] to-[oklch(0.55_0.18_264)] p-8 text-center">
           <div className="flex justify-center mb-6">
             <div className="bg-white px-6 py-3 rounded-lg">
@@ -77,6 +96,7 @@ const handleLogin = async () => {
           </h1>
         </div>
 
+        {/* Conteúdo */}
         <CardContent className="p-8">
           <div className="space-y-6">
             <div className="text-center space-y-2">
@@ -88,6 +108,7 @@ const handleLogin = async () => {
               </p>
             </div>
 
+            {/* Botão Google */}
             <Button
               onClick={handleLogin}
               disabled={signingIn}
@@ -125,9 +146,10 @@ const handleLogin = async () => {
 
             <div className="pt-4 border-t border-gray-200">
               <p className="text-xs text-center text-gray-500">
-                Ao fazer login, você concorda com os termos de uso e política de privacidade
+                Ao fazer login, você concorda com os termos de uso e política de privacidade.
               </p>
             </div>
+
           </div>
         </CardContent>
       </Card>
