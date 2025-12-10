@@ -1,41 +1,47 @@
-/**
- * Funções de conexão segura com Baserow
- * Token nunca é exposto ao frontend
- */
+const BASEROW_URL = process.env.BASEROW_URL;
+const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
 
-export async function baserowGet(path: string) {
-  const url = `${process.env.BASEROW_URL}/${path}`;
-  
+async function baserowRequest(
+  method: "GET" | "POST" | "PATCH",
+  path: string,
+  body?: any
+) {
+  if (!BASEROW_URL || !BASEROW_TOKEN) {
+    throw new Error("Baserow env vars missing!");
+  }
+
+  // 🔥 Normaliza caminho para NÃO duplicar "/api/database/rows/"
+  const cleanPath = path.replace(/^\/?api\/database\/rows\//, "").replace(/^\//, "");
+
+  const url = `${BASEROW_URL}/api/database/rows/${cleanPath}`;
+  console.log("📡 BASEROW REQUEST →", url);
+
   const res = await fetch(url, {
+    method,
     headers: {
-      Authorization: `Token ${process.env.BASEROW_TOKEN}`,
-      "Content-Type": "application/json"
+      Authorization: `Token ${BASEROW_TOKEN}`,
+      "Content-Type": "application/json",
     },
-    cache: "no-store"
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!res.ok) {
-    throw new Error(`Erro Baserow GET: ${res.status}`);
+    const err = await res.json().catch(() => ({}));
+    console.error("❌ BASEROW ERROR:", err);
+    throw new Error(err?.detail || `Erro Baserow ${res.status}`);
   }
 
   return res.json();
 }
 
-export async function baserowPatch(path: string, data: any) {
-  const url = `${process.env.BASEROW_URL}/${path}`;
+export async function baserowGet(path: string) {
+  return baserowRequest("GET", path);
+}
 
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Token ${process.env.BASEROW_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(data)
-  });
+export async function baserowPost(path: string, body: any) {
+  return baserowRequest("POST", path, body);
+}
 
-  if (!res.ok) {
-    throw new Error(`Erro Baserow PATCH: ${res.status}`);
-  }
-
-  return res.json();
+export async function baserowPatch(path: string, body: any) {
+  return baserowRequest("PATCH", path, body);
 }
