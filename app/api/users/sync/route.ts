@@ -1,46 +1,104 @@
-import { NextRequest, NextResponse } from "next/server";
-import { findUserByUid, createUser } from "@/lib/baserowUsers";
+// /app/api/users/sync/route.ts
 
-export async function POST(req: NextRequest) {
+import { NextResponse } from "next/server";
+
+const BASEROW_TOKEN = process.env.BASEROW_PAT;
+const BASEROW_API = "https://baserow.automator-doa.com.br/api/database/rows/table/747/";
+const HEADERS = {
+  Authorization: `Token ${BASEROW_TOKEN}`,
+  "Content-Type": "application/json",
+};
+
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log("📥 RECEBIDO NA ROTA /api/users/sync:", body);
-
     const { uid, nome, email, papel } = body;
 
+    console.log("📥 RECEBIDO PARA SYNC:", body);
+
     if (!uid || !email) {
-      console.log("❌ Faltando campos:", body);
-      return NextResponse.json(
-        { error: "uid e email são obrigatórios" },
-        { status: 400 }
-      );
+      console.log("❌ UID ou Email ausentes");
+      return NextResponse.json({ error: "Missing uid or email" }, { status: 400 });
     }
 
-    console.log("🔎 Buscando usuário no Baserow pelo UID:", uid);
-    const existing = await findUserByUid(uid);
-    console.log("🔍 Resultado findUserByUid:", existing);
+    // 🔍 Busca aprimorada (ignora valores vazios)
+    const filterUrl =
+      `${BASEROW_API}?user_field_names=true` +
+      `&filter__uid__equal=${encodeURIComponent(uid)}` +
+      `&filter__uid__not_equal=`; // <-- ignora registros com uid vazio
 
-    if (existing) {
-      console.log("✔ Usuário já existia — NÃO criar novamente");
-      return NextResponse.json({ ok: true, user: existing, created: false });
+    console.log("🔎 Consultando Baserow:", filterUrl);
+
+    const res = await fetch(filterUrl, { method: "GET", headers: HEADERS });
+    const data = await res.json();
+
+    console.log("🔍 RESPOSTA FIND:", data);
+
+    const exists = data?.results?.length > 0 ? data.results[0] : null;
+
+    // =====================================================================================
+    // CASO 1 — USUÁRIO JÁ EXISTE → Atualizar dados se necessário
+    // =====================================================================================
+
+    if (exists) {
+      console.log("✔ Usuário encontrado:", exists);
+
+      const updateUrl = `${BASEROW_API}${exists.id}/?user_field_names=true`;
+
+      const updatePayload = {
+        nome,
+        email,
+        papel,
+        ativo: true,
+      };
+
+      console.log("♻ Atualizando usuário:", updatePayload);
+
+      await fetch(updateUrl, {
+        method: "PATCH",
+        headers: HEADERS,
+        body: JSON.stringify(updatePayload),
+      });
+
+      return NextResponse.json({
+        status: "updated",
+        baserow_id: exists.id,
+      });
     }
 
-    console.log("➕ Criando usuário no Baserow...");
-    const created = await createUser({
+    // =====================================================================================
+    // CASO 2 — USUÁRIO NÃO EXISTE → Criar novo
+    // =====================================================================================
+
+    console.log("➕ Criando novo usuário no Baserow…");
+
+    const payload = {
       uid,
-      nome: nome || "",
+      nome,
       email,
-      papel: papel || "zelador",
+      papel,
+      ativo: true,
+    };
+
+    console.log("📦 Dados enviados ao Baserow:", payload);
+
+    const createRes = await fetch(BASEROW_API, {
+      method: "POST",
+      headers: HEADERS,
+      body: JSON.stringify(payload),
     });
 
-    console.log("🎉 Usuário criado no Baserow:", created);
+    const created = await createRes.json();
 
-    return NextResponse.json({ ok: true, user: created, created: true });
-  } catch (error: any) {
-    console.error("💥 ERRO NO /api/users/sync:", error);
-    return NextResponse.json(
-      { error: error?.message || "Erro ao sincronizar usuário" },
-      { status: 500 }
-    );
+    console.log("🎉 Usuário criado:", created);
+
+    return NextResponse.json({
+      status: "created",
+      baserow_id: created.id,
+    });
+
+  } catch (error) {
+    console.error("💥 ERRO EM /api/users/sync:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
