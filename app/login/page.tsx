@@ -1,34 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
-
-import { useAuth } from "@/context/AuthContext"; // 🔥 NOVO: importa o contexto global
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, loading } = useAuth(); // 🔥 NOVO: agora sabemos se já existe usuário logado
+  const { user, loading } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
 
-  // 🔥 Se o usuário já estiver logado, redireciona automaticamente
   useEffect(() => {
+    // Se já estiver logado, manda direto para o dash
     if (!loading && user) {
       router.push("/dashboard");
     }
-  }, [loading, user, router]);
+  }, [user, loading, router]);
 
   const handleLogin = async () => {
     try {
       setSigningIn(true);
       await signInWithPopup(auth, googleProvider);
-
       toast.success("Login realizado com sucesso!");
       router.push("/dashboard");
     } catch (error) {
@@ -38,6 +35,14 @@ export default function LoginPage() {
       setSigningIn(false);
     }
   };
+
+  // Enquanto carrega o estado do usuário
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-gray-600" />
+      </div>
+    );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.38_0.15_264)] via-[oklch(0.45_0.16_264)] to-[oklch(0.55_0.18_264)] p-4">
