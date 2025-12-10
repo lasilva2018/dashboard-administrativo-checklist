@@ -22,19 +22,34 @@ export default function LoginPage() {
     }
   }, [user, loading, router]);
 
-  const handleLogin = async () => {
-    try {
-      setSigningIn(true);
-      await signInWithPopup(auth, googleProvider);
-      toast.success("Login realizado com sucesso!");
-      router.push("/dashboard");
-    } catch (error) {
-      console.error("Erro ao fazer login:", error);
-      toast.error("Erro ao fazer login. Tente novamente.");
-    } finally {
-      setSigningIn(false);
-    }
-  };
+const handleLogin = async () => {
+  try {
+    setSigningIn(true);
+    const result = await signInWithPopup(auth, googleProvider);
+
+    const firebaseUser = result.user;
+
+    // 🔥 Chama API interna para registrar/sincronizar o usuário no Baserow
+    await fetch("/api/users/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid: firebaseUser.uid,
+        nome: firebaseUser.displayName || "",
+        email: firebaseUser.email,
+        papel: "sindico", // ou "zelador", dependendo do tipo de usuário
+      }),
+    });
+
+    toast.success("Login realizado com sucesso!");
+    router.push("/dashboard");
+  } catch (error) {
+    console.error("Erro ao fazer login:", error);
+    toast.error("Erro ao fazer login. Tente novamente.");
+  } finally {
+    setSigningIn(false);
+  }
+};
 
   // Enquanto carrega o estado do usuário
   if (loading)
